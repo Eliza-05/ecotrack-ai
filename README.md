@@ -14,8 +14,8 @@ El objetivo del proyecto es demostrar cómo una aplicación web funcional puede 
 
 | Recurso | Enlace |
 |---|---|
-| 📦 Repositorio | [EcoTrack AI](URL_REPOSITORIO) |
-| 🚀 Aplicación desplegada | [EcoTrack AI Live](URL_VERCEL) *(pendiente de despliegue)* |
+| 📦 Repositorio | [EcoTrack AI](https://github.com/Eliza-05/ecotrack-ai.git) |
+| 🚀 Aplicación desplegada | [EcoTrack AI Live](https://ecotrack-18rs9fzru-eliza-05s-projects.vercel.app/)  |
 | 📓 Bitácora completa de prompts e iteraciones | [BITACORA.md](./BITACORA.md) |
 
 ---
