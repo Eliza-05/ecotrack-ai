@@ -1,120 +1,75 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+﻿import Header from './components/Header'
+import { useRef, useState } from 'react'
+import ActivityInput from './components/ActivityInput'
+import ImpactPreview from './components/ImpactPreview'
+import HowItWorks from './components/HowItWorks'
+import Icon from './components/Icon'
+import { analyzeActivity, hasEnoughText } from './utils/analyzeActivity'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [description, setDescription] = useState('')
+  const [result, setResult] = useState(null)
+  const [status, setStatus] = useState('idle')
+  const [error, setError] = useState('')
+  const processing = useRef(false)
+
+  function handleDescriptionChange(value) {
+    if (processing.current) return
+    setDescription(value)
+    setResult(null)
+    setError('')
+    setStatus('idle')
+  }
+
+  async function handleAnalyze() {
+    if (processing.current || !hasEnoughText(description)) return
+    processing.current = true
+    setStatus('loading')
+    setResult(null)
+    setError('')
+    try {
+      const analysis = await analyzeActivity(description)
+      setResult(analysis)
+      setStatus(analysis.impactoEstimado === null ? 'insufficient' : 'success')
+    } catch {
+      setError('No pudimos completar la estimación. Inténtalo de nuevo.')
+      setStatus('error')
+    } finally {
+      processing.current = false
+    }
+  }
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+      <a className="skip-link" href="#contenido">Saltar al contenido</a>
+      <Header />
+      <main id="contenido" className="page-shell">
+        <section className="intro" aria-labelledby="page-title">
+          <span className="eyebrow"><span className="status-dot" /> GRANDES CAMBIOS, PEQUEÑOS NEGOCIOS</span>
+          <h1 id="page-title">Tu día a día, con una<br /><span>huella más consciente.</span></h1>
+          <p>Entender el impacto de tu negocio empieza con algo simple:<br className="desktop-break" /> contarnos qué hiciste hoy. Sin formularios complicados.</p>
+        </section>
+        <div className="workspace">
+          <ActivityInput
+            description={description}
+            onDescriptionChange={handleDescriptionChange}
+            onAnalyze={handleAnalyze}
+            isLoading={status === 'loading'}
+            error={error}
+          />
+          <ImpactPreview result={result} status={status} />
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+        <HowItWorks />
+        <aside className="purpose-note">
+          <Icon name="leaf" size={19} />
+          <p>No necesitas ser experto para dar el primer paso hacia un negocio más sostenible.</p>
+        </aside>
+      </main>
+      <footer className="site-footer page-shell">
+        <span>EcoTrack AI <span className="footer-divider">/</span> Pequeños pasos. Menos huella.</span>
+        <span>Hecho para un futuro más verde <Icon name="leaf" size={14} /></span>
+      </footer>
     </>
   )
 }
