@@ -109,4 +109,114 @@ describe('análisis local de actividades', { concurrency: true }, () => {
     assert.equal(hasEnoughText('..............'), false)
     assert.equal(hasEnoughText('Consumimos 200 kWh'), true)
   })
+
+  const invalidAmounts = [
+    ['miles separados por espacio', 'Consumimos 1 000 kWh.'],
+    ['miles separados por espacio no separable', 'Consumimos 1\u00a0000 kWh.'],
+    ['signo menos Unicode', 'Consumimos −200 kWh.'],
+    ['signo menos separado', 'Consumimos - 200 kWh.'],
+    ['signo Unicode separado', 'Consumimos − 200 kWh.'],
+    ['fracción de vehículos', 'Usamos 1/2 camionetas.'],
+    ['fracción con espacios', 'Usamos 1 / 2 camionetas.'],
+    ['rango de cantidades', 'Consumimos 100-200 kWh.'],
+    ['cantidad mal formada junto a residuos', 'Generamos 1 000 kg de residuos.'],
+  ]
+  for (const [name, description] of invalidAmounts) {
+    it(`rechaza la expresión completa: ${name}`, async () => {
+      const result = await analyzeActivity(description)
+      assert.equal(result.impactoEstimado, null)
+      assert.ok(result.actividadesDetectadas.length > 0)
+      assert.ok(result.actividadesDetectadas.every(({ cantidad, impactoEstimado, advertencia }) => (
+        cantidad === null && impactoEstimado === null && advertencia.codigo === 'CANTIDAD_INVALIDA'
+      )))
+    })
+  }
+
+  const unsafeDescriptions = [
+    'No usamos 5 camionetas.',
+    'Ahorramos 200 kWh.',
+    'Evitamos usar 2 vehículos.',
+    'No usamos 5 camionetas y 2 autos.',
+    'Ahorramos 100 kWh y 200 kWh.',
+  ]
+  for (const description of unsafeDescriptions) {
+    it(`solicita aclaración del contexto: ${description}`, async () => {
+      const result = await analyzeActivity(description)
+      assert.equal(result.impactoEstimado, null)
+      assert.ok(result.actividadesDetectadas.length > 0)
+      assert.ok(result.actividadesDetectadas.every(({ advertencia }) => advertencia.codigo === 'CONTEXTO_INSEGURO'))
+      assert.ok(result.recomendaciones.some((message) => message.includes('Aclara qué actividad')))
+    })
+  }
+
+  const breakdownDescriptions = [
+    'Consumimos 200 kWh en total: 150 kWh de equipos y 50 kWh de luces.',
+    'Consumimos 200 kWh en total. Equipos: 150 kWh. Luces: 50 kWh.',
+    'Consumimos 200 kWh: 150 kWh de equipos y 50 kWh de luces.',
+    'Usamos 5 vehículos en total: 3 camionetas y 2 autos.',
+  ]
+  for (const description of breakdownDescriptions) {
+    it(`evita doble conteo: ${description}`, async () => {
+      const result = await analyzeActivity(description)
+      assert.equal(result.impactoEstimado, null)
+      assert.ok(result.actividadesDetectadas.every(({ cantidad, advertencia }) => (
+        cantidad === null && advertencia.codigo === 'POSIBLE_DOBLE_CONTEO'
+      )))
+    })
+  }
+
+  it('conserva una cantidad inválida junto a una válida de la misma categoría', async () => {
+    const result = await analyzeActivity('Consumimos 100 kWh y -20 kWh.')
+    assert.equal(result.impactoEstimado, 20)
+    assert.deepEqual(result.actividadesDetectadas.map(({ cantidad }) => cantidad), [100, null])
+    assert.equal(result.actividadesDetectadas[1].advertencia.codigo, 'CANTIDAD_INVALIDA')
+    assert.ok(result.recomendaciones.some((message) => message.includes('inválida o ambigua')))
+  })
+
+  it('conserva consumo adicional sin medir dentro de la misma categoría', async () => {
+    const result = await analyzeActivity('Consumimos 100 kWh y electricidad adicional sin medir.')
+    assert.equal(result.impactoEstimado, 20)
+    assert.deepEqual(result.actividadesDetectadas.map(({ cantidad }) => cantidad), [100, null])
+    assert.equal(result.actividadesDetectadas[1].advertencia.codigo, 'CANTIDAD_PENDIENTE')
+  })
+
+  it('conserva una unidad sin cantidad en la misma cláusula', async () => {
+    const result = await analyzeActivity('Electricidad: 100 kWh más otros kWh sin medir.')
+    assert.equal(result.impactoEstimado, 20)
+    assert.deepEqual(result.actividadesDetectadas.map(({ cantidad }) => cantidad), [100, null])
+  })
+
+  it('mantiene un consumo seguro de otra categoría al detectar una negación', async () => {
+    const result = await analyzeActivity('No usamos 5 camionetas y consumimos 200 kWh.')
+    assert.equal(result.impactoEstimado, 40)
+    assert.deepEqual(result.actividadesDetectadas.map(({ cantidad }) => cantidad), [200, null])
+  })
+
+  it('mantiene una actividad segura en una oración independiente de la misma categoría', async () => {
+    const result = await analyzeActivity('No usamos 5 camionetas. Usamos 2 autos.')
+    assert.equal(result.impactoEstimado, 20)
+    assert.deepEqual(result.actividadesDetectadas.map(({ cantidad }) => cantidad), [null, 2])
+  })
+
+  it('conserva otras categorías cuando un total con desglose resulta ambiguo', async () => {
+    const result = await analyzeActivity('Consumimos 200 kWh en total: 150 kWh y 50 kWh. Usamos 2 camionetas.')
+    assert.equal(result.impactoEstimado, 20)
+    assert.ok(result.actividadesDetectadas.some(({ cantidad }) => cantidad === null))
+    assert.equal(result.actividadesDetectadas.at(-1).cantidad, 2)
+  })
+
+  it('no rechaza un único total ni duplica las menciones de electricidad', async () => {
+    const result = await analyzeActivity('Consumimos en total 200 kWh de electricidad.')
+    assert.equal(result.impactoEstimado, 40)
+    assert.equal(result.actividadesDetectadas.length, 1)
+    assert.equal(result.actividadesDetectadas[0].advertencia, undefined)
+  })
+
+  it('no traslada un desglose ambiguo a cantidades independientes de otra categoría', async () => {
+    const result = await analyzeActivity('Consumimos 200 kWh en total: 150 kWh y 50 kWh. Usamos 2 camionetas y 3 autos.')
+    assert.equal(result.impactoEstimado, 50)
+    const transport = result.actividadesDetectadas.filter(({ categoria }) => categoria === 'transporte')
+    assert.deepEqual(transport.map(({ cantidad }) => cantidad), [2, 3])
+    assert.ok(transport.every(({ advertencia }) => advertencia === undefined))
+  })
 })
